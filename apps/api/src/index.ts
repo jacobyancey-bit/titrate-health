@@ -15,6 +15,7 @@ import jwt from "jsonwebtoken";
 import { Role } from "@prisma/client";
 import { prisma } from "./db.js";
 import { requireAuth, requireRole } from "./middleware/auth.js";
+import { intakeRouter } from "./routes/intake.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -142,6 +143,7 @@ app.get(
     });
   }
 );
+app.use("/api/intake", intakeRouter);
 
 // ============================================================================
 // 3. START HTTP SERVER
