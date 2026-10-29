@@ -1,0 +1,20 @@
+# 1. Dependencies
+node_modules/
+
+# 2. Build outputs (TypeScript & Next.js)
+dist/
+build/
+.next/
+out/
+
+# 3. Secrets & Environment variables (Keep .env.example!)
+.env
+.env.*
+!.env.example
+
+# 4. Logs, Testing & OS noise
+*.log
+npm-debug.log*
+coverage/
+.DS_Store
+Thumbs.db

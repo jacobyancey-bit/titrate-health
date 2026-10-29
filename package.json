@@ -1,0 +1,17 @@
+{
+  "name": "titrate-health",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Clinical weight management & GLP-1 titration telehealth platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web"
+  },
+  "keywords": ["telehealth", "glp-1", "clinical", "fullstack"],
+  "author": "",
+  "license": "ISC"
+}
