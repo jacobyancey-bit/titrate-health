@@ -16,6 +16,7 @@ import { Role } from "@prisma/client";
 import { prisma } from "./db.js";
 import { requireAuth, requireRole } from "./middleware/auth.js";
 import { intakeRouter } from "./routes/intake.js";
+import { patientRouter } from "./routes/patient.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -144,6 +145,7 @@ app.get(
   }
 );
 app.use("/api/intake", intakeRouter);
+app.use("/api/patient", patientRouter);
 
 // ============================================================================
 // 3. START HTTP SERVER
