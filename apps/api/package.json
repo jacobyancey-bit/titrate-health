@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
+    "test": "tsx --test src/__tests__/clinical-and-auth.test.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev"
   },

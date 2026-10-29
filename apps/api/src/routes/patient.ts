@@ -43,7 +43,7 @@ const getDashboardCacheKey = (userId: string): string => `patient:dashboard:${us
  * Pure clinical state machine function that computes the patient's current and
  * recommended next Semaglutide dosage along `[0.25, 0.5, 1.0, 1.7, 2.4]` mg.
  */
-function evaluateTitrationRecommendation(
+export function evaluateTitrationRecommendation(
   latestLog?: { dosageMg: number; weekNumber: number; sideEffects: string[] }
 ) {
   if (!latestLog) {
