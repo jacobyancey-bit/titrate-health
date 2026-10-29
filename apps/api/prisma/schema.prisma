@@ -1,0 +1,126 @@
+// ============================================================================
+// TITRATE-HEALTH RELATIONAL DATABASE SCHEMA (PostgreSQL + Prisma ORM)
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Role-Based Access Control (RBAC) personas across the telehealth platform.
+enum Role {
+  PATIENT
+  CLINICIAN
+  CARE_COORDINATOR
+}
+
+/// Clinical state machine statuses for a patient's medical intake assessment.
+enum IntakeStatus {
+  PENDING_REVIEW
+  APPROVED
+  INELIGIBLE
+}
+
+/// Core authentication identity table.
+/// Separated from `PatientProfile` (3rd Normal Form) because Clinicians and
+/// Care Coordinators also authenticate as Users without having patient demographics.
+model User {
+  /// UUID v4 primary key to prevent Insecure Direct Object Reference (IDOR) enumeration.
+  id             String          @id @default(uuid())
+  /// Unique B-Tree indexed email for O(log n) login lookup performance.
+  email          String          @unique
+  /// Cryptographic password hash (never store plaintext credentials).
+  passwordHash   String
+  /// Authorization role enforced by API middleware guards.
+  role           Role            @default(PATIENT)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  // 1:1 and 1:N Relations
+  patientProfile PatientProfile?
+  auditLogs      AuditLog[]
+}
+
+/// 1-to-1 extension of `User` storing baseline clinical demographics for patients.
+model PatientProfile {
+  id               String           @id @default(uuid())
+  /// Unique foreign key enforcing strict 1:1 cardinality with `User`.
+  userId           String           @unique
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dateOfBirth      DateTime
+  heightInches     Float
+  startingWeightLb Float
+  goalWeightLb     Float?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  // 1-to-Many Time-Series & Clinical Child Relations
+  intakes          ClinicalIntake[]
+  medicationLogs   MedicationLog[]
+  biometrics       BiometricEntry[]
+}
+
+/// Medical eligibility evaluation submitted during onboarding or renewal.
+model ClinicalIntake {
+  id                  String         @id @default(uuid())
+  patientProfileId    String
+  patientProfile      PatientProfile @relation(fields: [patientProfileId], references: [id], onDelete: Cascade)
+  calculatedBmi       Float
+  comorbidities       String[]
+  contraindications   String[]
+  status              IntakeStatus   @default(PENDING_REVIEW)
+  reviewedByClinician String?
+  clinicianNotes      String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  /// Composite index optimizing clinician triage queries filtering by patient and status.
+  @@index([patientProfileId, status])
+}
+
+/// Weekly GLP-1 injection adherence, titration step, and side-effect log.
+model MedicationLog {
+  id               String         @id @default(uuid())
+  patientProfileId String
+  patientProfile   PatientProfile @relation(fields: [patientProfileId], references: [id], onDelete: Cascade)
+  medicationName   String
+  dosageMg         Float
+  weekNumber       Int
+  sideEffects      String[]
+  administeredAt   DateTime       @default(now())
+
+  /// Composite index for chronological medication timeline queries.
+  @@index([patientProfileId, administeredAt])
+}
+
+/// Time-series biometric tracking (weight, protein, hydration) plotted on patient charts.
+model BiometricEntry {
+  id               String         @id @default(uuid())
+  patientProfileId String
+  patientProfile   PatientProfile @relation(fields: [patientProfileId], references: [id], onDelete: Cascade)
+  weightLb         Float
+  proteinGrams     Int?
+  waterOunces      Int?
+  recordedAt       DateTime       @default(now())
+
+  /// Composite index optimizing time-series chart queries (WHERE patientProfileId ORDER BY recordedAt).
+  @@index([patientProfileId, recordedAt])
+}
+
+/// Immutable, append-only HIPAA compliance audit trail tracking all PHI access and mutations.
+model AuditLog {
+  id               String   @id @default(uuid())
+  actorId          String
+  actor            User     @relation(fields: [actorId], references: [id])
+  action           String
+  targetResourceId String
+  ipAddress        String?
+  createdAt        DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetResourceId])
+}
