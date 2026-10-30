@@ -18,6 +18,12 @@ import {
 } from "@titrate-health/shared";
 import { evaluateTitrationRecommendation } from "../routes/patient.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import {
+  hashPassword,
+  verifyPassword,
+  securityHeaders,
+  createRateLimiter,
+} from "../middleware/security.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-fallback-secret";
 
@@ -26,7 +32,13 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev-fallback-secret";
  * without spinning up a live TCP socket.
  */
 function createMockResponse() {
-  const res: Partial<Response> & { statusCode?: number; body?: unknown } = {};
+  const headers: Record<string, string> = { "X-Powered-By": "Express" };
+  const res: Partial<Response> & {
+    statusCode?: number;
+    body?: unknown;
+    headers: Record<string, string>;
+  } = { headers };
+
   res.status = (code: number) => {
     res.statusCode = code;
     return res as Response;
@@ -34,6 +46,13 @@ function createMockResponse() {
   res.json = (payload: unknown) => {
     res.body = payload;
     return res as Response;
+  };
+  res.setHeader = (name: string, value: number | string | readonly string[]) => {
+    headers[name] = String(value);
+    return res as Response;
+  };
+  res.removeHeader = (name: string) => {
+    delete headers[name];
   };
   return res;
 }
@@ -174,5 +193,58 @@ describe("3. Stateless JWT Authentication (401) & RBAC Middleware (403)", () => 
     });
 
     assert.equal(clinicianRouteReached, true);
+  });
+});
+describe("4. Cryptographic Password Hashing (scrypt), Security Headers & Rate Limiting (429)", () => {
+  it("generates unique salted scrypt hashes and verifies passwords in constant time", () => {
+    const hash1 = hashPassword("ClinicalSecret2026!");
+    const hash2 = hashPassword("ClinicalSecret2026!");
+
+    // Two hashes of the exact same password MUST differ due to unique 16-byte salts
+    assert.notEqual(hash1, hash2);
+
+    assert.equal(verifyPassword("ClinicalSecret2026!", hash1), true);
+    assert.equal(verifyPassword("WrongPassword123!", hash1), false);
+  });
+
+  it("attaches OWASP HTTP security headers and strips X-Powered-By", () => {
+    const req = {} as Request;
+    const res = createMockResponse();
+    let nextCalled = false;
+
+    securityHeaders(req, res as unknown as Response, () => {
+      nextCalled = true;
+    });
+
+    assert.equal(nextCalled, true);
+    assert.equal(res.headers["X-Powered-By"], undefined);
+    assert.equal(res.headers["X-Content-Type-Options"], "nosniff");
+    assert.equal(res.headers["X-Frame-Options"], "DENY");
+  });
+
+  it("enforces IP rate limiting and returns HTTP 429 Too Many Requests when exceeded", () => {
+    const limiter = createRateLimiter(2, 60_000); // Allow max 2 requests per window
+    const req = { ip: "192.168.1.50" } as Request;
+
+    const res1 = createMockResponse();
+    let passed = 0;
+    limiter(req, res1 as unknown as Response, () => {
+      passed += 1;
+    });
+
+    const res2 = createMockResponse();
+    limiter(req, res2 as unknown as Response, () => {
+      passed += 1;
+    });
+
+    // 3rd request from the same IP should be blocked with 429 Too Many Requests
+    const res3 = createMockResponse();
+    limiter(req, res3 as unknown as Response, () => {
+      passed += 1;
+    });
+
+    assert.equal(passed, 2);
+    assert.equal(res3.statusCode, 429);
+    assert.equal(res3.headers["X-RateLimit-Remaining"], "0");
   });
 });

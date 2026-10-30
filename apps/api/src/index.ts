@@ -17,6 +17,12 @@ import { prisma } from "./db.js";
 import { requireAuth, requireRole } from "./middleware/auth.js";
 import { intakeRouter } from "./routes/intake.js";
 import { patientRouter } from "./routes/patient.js";
+import {
+  securityHeaders,
+  createRateLimiter,
+  hashPassword,
+  verifyPassword,
+} from "./middleware/security.js";
 
 const app = express();
 const PORT = Number(process.env.PORT) || 4000;
@@ -30,6 +36,8 @@ const JWT_SECRET = process.env.JWT_SECRET || "dev-fallback-secret";
  * Enable Cross-Origin Resource Sharing (CORS) so the Next.js frontend
  * (running on port 3000) is permitted by the browser to call this API (port 4000).
  */
+app.use(securityHeaders);
+app.use(createRateLimiter(120, 60_000));
 app.use(cors());
 
 /**
@@ -85,7 +93,7 @@ app.post("/api/auth/demo-token", async (req: Request, res: Response) => {
       update: { role: requestedRole },
       create: {
         email,
-        passwordHash: "demo_argon2_hash_placeholder",
+        passwordHash: hashPassword("TitrateClinicalDemo2026!"),
         role: requestedRole,
       },
     });
