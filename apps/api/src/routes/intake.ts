@@ -234,3 +234,34 @@ intakeRouter.patch(
     }
   }
 );
+
+/**
+ * GET /api/intake/audit-logs
+ * Returns the 25 most recent immutable HIPAA AuditLog records for compliance inspection.
+ * Restricted strictly to CLINICIAN and CARE_COORDINATOR roles.
+ */
+intakeRouter.get(
+  "/audit-logs",
+  requireAuth,
+  requireRole(["CLINICIAN", "CARE_COORDINATOR"]),
+  async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const logs = await prisma.auditLog.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 25,
+        include: {
+          actor: {
+            select: { email: true, role: true },
+          },
+        },
+      });
+
+      res.status(200).json({ count: logs.length, logs });
+    } catch (error) {
+      res.status(500).json({
+        error: "Failed to fetch HIPAA audit logs",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+);

@@ -63,6 +63,7 @@ export default function TitrateHealthPortal() {
 
   // Clinician Queue State
   const [intakeQueue, setIntakeQueue] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
 
   /**
    * 1. Authenticate with the Express API for the selected RBAC persona.
@@ -113,14 +114,23 @@ export default function TitrateHealthPortal() {
    * 3. Fetch Clinician Intake Triage Queue.
    */
   const fetchClinicianQueue = async (jwtToken = token) => {
-    const res = await fetch(`${API_BASE}/api/intake/queue`, {
+  const [queueRes, auditRes] = await Promise.all([
+    fetch(`${API_BASE}/api/intake/queue`, {
       headers: { Authorization: `Bearer ${jwtToken}` },
-    });
-    const payload = await res.json();
-    if (res.ok) {
-      setIntakeQueue(payload.intakes || []);
-    }
-  };
+    }),
+    fetch(`${API_BASE}/api/intake/audit-logs`, {
+      headers: { Authorization: `Bearer ${jwtToken}` },
+    }),
+  ]);
+  if (queueRes.ok) {
+    const payload = await queueRes.json();
+    setIntakeQueue(payload.intakes || []);
+  }
+  if (auditRes.ok) {
+    const auditPayload = await auditRes.json();
+    setAuditLogs(auditPayload.logs || []);
+  }
+};
 
   useEffect(() => {
     authenticateRole("PATIENT");
@@ -645,87 +655,144 @@ export default function TitrateHealthPortal() {
               </form>
             </section>
           </>
-        ) : (
+                ) : (
           /* CLINICIAN RBAC TRIAGE VIEW */
-          <section className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 space-y-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-bold text-white flex items-center gap-2">
-                  <Stethoscope className="h-4 w-4 text-indigo-400" />
-                  Clinician Intake Triage Queue (RBAC Protected: CLINICIAN Role Only)
-                </h2>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Approving an intake executes a Prisma ACID transaction that updates intake
-                  status, seeds Week 1 Semaglutide (0.25mg), and writes a HIPAA AuditLog.
-                </p>
-              </div>
-              <span className="text-xs font-mono px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
-                {intakeQueue.length} Intakes
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              {intakeQueue.map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-xl bg-slate-950/80 border border-slate-800 p-4 flex flex-wrap items-center justify-between gap-4"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm font-semibold text-white">
-                        {item.patientProfile?.user?.email || "Patient"}
-                      </span>
-                      <span
-                        className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                          item.status === "APPROVED"
-                            ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-                            : item.status === "INELIGIBLE"
-                            ? "bg-rose-500/15 text-rose-300 border border-rose-500/30"
-                            : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
-                        }`}
-                      >
-                        {item.status}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400">
-                      Calculated BMI:{" "}
-                      <strong className="text-slate-200">{item.calculatedBmi}</strong> •
-                      Comorbidities:{" "}
-                      <span className="text-slate-300">
-                        {item.comorbidities?.join(", ") || "None"}
-                      </span>{" "}
-                      • Contraindications:{" "}
-                      <span className="text-rose-300">
-                        {item.contraindications?.join(", ") || "None"}
-                      </span>
-                    </p>
-                    {item.clinicianNotes && (
-                      <p className="text-xs text-slate-400 italic">
-                        “{item.clinicianNotes}”
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => handleClinicianDecision(item.id, "APPROVED")}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs transition"
-                    >
-                      <CheckCircle2 className="h-3.5 w-3.5" />
-                      Approve (Start 0.25mg)
-                    </button>
-                    <button
-                      onClick={() => handleClinicianDecision(item.id, "INELIGIBLE")}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 font-semibold text-xs transition"
-                    >
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                      Flag Ineligible
-                    </button>
-                  </div>
+          <>
+            <section className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 space-y-5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <Stethoscope className="h-4 w-4 text-indigo-400" />
+                    Clinician Intake Triage Queue (RBAC Protected: CLINICIAN Role Only)
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Approving an intake executes a Prisma ACID transaction that updates intake
+                    status, seeds Week 1 Semaglutide (0.25mg), and writes a HIPAA AuditLog.
+                  </p>
                 </div>
-              ))}
-            </div>
-          </section>
+                <span className="text-xs font-mono px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                  {intakeQueue.length} Intakes
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {intakeQueue.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-xl bg-slate-950/80 border border-slate-800 p-4 flex flex-wrap items-center justify-between gap-4"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-sm font-semibold text-white">
+                          {item.patientProfile?.user?.email || "Patient"}
+                        </span>
+                        <span
+                          className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                            item.status === "APPROVED"
+                              ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                              : item.status === "INELIGIBLE"
+                              ? "bg-rose-500/15 text-rose-300 border border-rose-500/30"
+                              : "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                          }`}
+                        >
+                          {item.status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        Calculated BMI:{" "}
+                        <strong className="text-slate-200">{item.calculatedBmi}</strong> •
+                        Comorbidities:{" "}
+                        <span className="text-slate-300">
+                          {item.comorbidities?.join(", ") || "None"}
+                        </span>{" "}
+                        • Contraindications:{" "}
+                        <span className="text-rose-300">
+                          {item.contraindications?.join(", ") || "None"}
+                        </span>
+                      </p>
+                      {item.clinicianNotes && (
+                        <p className="text-xs text-slate-400 italic">
+                          “{item.clinicianNotes}”
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleClinicianDecision(item.id, "APPROVED")}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold text-xs transition"
+                      >
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Approve (Start 0.25mg)
+                      </button>
+                      <button
+                        onClick={() => handleClinicianDecision(item.id, "INELIGIBLE")}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/40 font-semibold text-xs transition"
+                      >
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Flag Ineligible
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* LIVE HIPAA IMMUTABLE AUDIT TRAIL */}
+            <section className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-emerald-400" />
+                    Immutable HIPAA Compliance Audit Trail (PostgreSQL AuditLog)
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Every PHI read and clinical mutation is permanently recorded with Actor UUID, Role, Action, Target Resource, and Timestamp.
+                  </p>
+                </div>
+                <span className="text-xs font-mono px-3 py-1 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  Last {auditLogs.length} Events
+                </span>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-slate-400 uppercase tracking-wider text-[11px]">
+                      <th className="py-2.5 px-3">Timestamp</th>
+                      <th className="py-2.5 px-3">Actor</th>
+                      <th className="py-2.5 px-3">Role</th>
+                      <th className="py-2.5 px-3">HIPAA Audited Action</th>
+                      <th className="py-2.5 px-3">Target Resource ID</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 font-mono">
+                    {auditLogs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-950/50">
+                        <td className="py-2.5 px-3 text-slate-400">
+                          {new Date(log.createdAt).toLocaleTimeString()}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-200">
+                          {log.actor?.email || log.actorId}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">
+                            {log.actor?.role || "USER"}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-emerald-300 font-semibold">
+                          {log.action}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-400">
+                          {log.targetResourceId}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          </>
         )}
       </main>
     </div>
