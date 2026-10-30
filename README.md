@@ -8,7 +8,7 @@
 ![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)
 ![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?logo=prisma&logoColor=white)
 
-**Titrate-Health** is a production-architected clinical weight management and **GLP-1 (Semaglutide) titration telemetry, clinician triage, and Recurly entitlement platform**. It models the end-to-end engineering workflows of modern clinical telehealth memberships (such as **WeightWatchers Med+**):
+**Titrate-Health** is a production-architected clinical weight management and **GLP-1 (Semaglutide) titration telemetry, clinician triage, and Recurly entitlement platform**. It models the end-to-end engineering workflows of modern clinical telehealth memberships:
 - **Domain-Driven Bounded Contexts**: Separates the consumer **Member Portal (`/`)** from the internal **Staff Admin Console (`/admin`)**.
 - **Automated FDA BMI & Contraindication Intake Triage** inside **ACID Database Transactions (`prisma.$transaction`)**.
 - **Deterministic GLP-1 Titration Escalation State Machine** with automatic GI side-effect safety holds.
