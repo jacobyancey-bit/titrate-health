@@ -1,14 +1,14 @@
 /**
- * @fileoverview Dedicated Internal Admin & Clinician Route (`http://localhost:3000/admin`).
+ * @fileoverview Dedicated Internal Staff Admin Route (`http://localhost:3000/admin`).
  *
- * Architectural Note for Interviews:
- * Demonstrates Next.js App Router file-system routing (`/admin`). In production,
- * this route (or a dedicated `apps/admin` subdomain behind corporate Okta SSO / VPN)
- * isolates internal `CLINICIAN` and `CARE_COORDINATOR` workflows from the Member portal.
+ * Enforces Route-Level & Role-Level Separation of Duties:
+ * - Consumer Members use `http://localhost:3000/` (`mode="MEMBER"`).
+ * - Internal Staff (`CLINICIAN` and `CARE_COORDINATOR`) use `http://localhost:3000/admin` (`mode="ADMIN"`),
+ *   where Clinical Prescribing controls and Recurly Billing controls are strictly separated by RBAC.
  */
 
 import TitrateHealthPortal from "../page";
 
 export default function AdminPortalRoute() {
-  return <TitrateHealthPortal />;
+  return <TitrateHealthPortal mode="ADMIN" />;
 }

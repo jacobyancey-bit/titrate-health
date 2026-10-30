@@ -153,7 +153,7 @@ const RecurlyWebhookSchema = z.object({
 opsRouter.post(
     "/recurly-webhook",
     requireAuth,
-    requireRole(["CARE_COORDINATOR", "CLINICIAN"]),
+    requireRole(["CARE_COORDINATOR"]),
     async (req: Request, res: Response): Promise<void> => {
         try {
             const parsed = RecurlyWebhookSchema.safeParse(req.body);
@@ -225,7 +225,7 @@ opsRouter.post(
 opsRouter.post(
     "/telemetry-dispatch",
     requireAuth,
-    requireRole(["CARE_COORDINATOR", "CLINICIAN"]),
+    requireRole(["CARE_COORDINATOR"]),
     async (req: Request, res: Response): Promise<void> => {
         try {
             const rawEvent = (req.body ?? {}) as Record<string, unknown>;
