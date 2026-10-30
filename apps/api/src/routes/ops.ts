@@ -172,7 +172,7 @@ opsRouter.post(
                 accountEmail,
             });
 
-            if (syncResult.idempotentSkip) {
+            if (syncResult.idempotentSkip || syncResult.recurlyState === "UNCHANGED") {
                 res.status(200).json({
                     message: `Webhook ${webhookId} already processed (Idempotent No-Op).`,
                     idempotentSkip: true,
