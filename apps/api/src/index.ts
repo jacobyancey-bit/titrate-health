@@ -17,6 +17,7 @@ import { prisma } from "./db.js";
 import { requireAuth, requireRole } from "./middleware/auth.js";
 import { intakeRouter } from "./routes/intake.js";
 import { patientRouter } from "./routes/patient.js";
+import { opsRouter } from "./routes/ops.js";
 import {
   securityHeaders,
   createRateLimiter,
@@ -81,11 +82,17 @@ app.get("/api/health", async (_req: Request, res: Response) => {
 app.post("/api/auth/demo-token", async (req: Request, res: Response) => {
   try {
     const requestedRole: Role =
-      req.body?.role === "CLINICIAN" ? "CLINICIAN" : "PATIENT";
+      req.body?.role === "CLINICIAN"
+        ? "CLINICIAN"
+        : req.body?.role === "CARE_COORDINATOR"
+          ? "CARE_COORDINATOR"
+          : "PATIENT";
     const email =
       requestedRole === "CLINICIAN"
         ? "dr.sarah.chen@titratehealth.com"
-        : "alex.rivera@patient.com";
+        : requestedRole === "CARE_COORDINATOR"
+          ? "ops.coordinator@titratehealth.com"
+          : "alex.rivera@patient.com";
 
     // Upsert (Update if exists, Insert if new) the user in PostgreSQL
     const user = await prisma.user.upsert({
@@ -154,6 +161,7 @@ app.get(
 );
 app.use("/api/intake", intakeRouter);
 app.use("/api/patient", patientRouter);
+app.use("/api/ops", opsRouter);
 
 // ============================================================================
 // 3. START HTTP SERVER

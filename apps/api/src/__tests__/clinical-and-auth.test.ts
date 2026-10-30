@@ -24,6 +24,10 @@ import {
   securityHeaders,
   createRateLimiter,
 } from "../middleware/security.js";
+import {
+  evaluateRecurlyEntitlementSync,
+  scrubPhiForServerTelemetry,
+} from "../routes/ops.js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "dev-fallback-secret";
 
@@ -170,7 +174,7 @@ describe("3. Stateless JWT Authentication (401) & RBAC Middleware (403)", () => 
     const resPatient = createMockResponse();
 
     // 1. Authenticate PATIENT token
-    requireAuth(reqPatient, resPatient as Response, () => {});
+    requireAuth(reqPatient, resPatient as Response, () => { });
     assert.equal(reqPatient.user?.role, "PATIENT");
 
     // 2. Attempt to pass requireRole(["CLINICIAN"]) -> Expect 403 Forbidden
@@ -246,5 +250,69 @@ describe("4. Cryptographic Password Hashing (scrypt), Security Headers & Rate Li
     assert.equal(passed, 2);
     assert.equal(res3.statusCode, 429);
     assert.equal(res3.headers["X-RateLimit-Remaining"], "0");
+  });
+});
+
+describe("5. Recurly Subscription Entitlement Sync, Dunning Grace & HIPAA PHI Scrubbing", () => {
+  it("enforces webhook idempotency so duplicate Recurly webhook IDs are skipped", () => {
+    const seenIds = new Set<string>();
+    const firstAttempt = evaluateRecurlyEntitlementSync({
+      webhookId: "recurly_wh_9001",
+      eventType: "invoice.paid",
+      accountEmail: "alex.rivera@patient.com",
+      alreadyProcessedIds: seenIds,
+    });
+    assert.equal(firstAttempt.idempotentSkip, false);
+    assert.equal(firstAttempt.recurlyState, "ACTIVE");
+
+    // Duplicate delivery of the exact same webhook ID must be a safe No-Op
+    const duplicateAttempt = evaluateRecurlyEntitlementSync({
+      webhookId: "recurly_wh_9001",
+      eventType: "invoice.paid",
+      accountEmail: "alex.rivera@patient.com",
+      alreadyProcessedIds: seenIds,
+    });
+    assert.equal(duplicateAttempt.idempotentSkip, true);
+  });
+
+  it("activates 7-day clinical continuity grace period on Recurly dunning instead of halting GLP-1", () => {
+    const seenIds = new Set<string>();
+    const dunningResult = evaluateRecurlyEntitlementSync({
+      webhookId: "recurly_wh_dunning_01",
+      eventType: "dunning.new_dunning_event",
+      accountEmail: "alex.rivera@patient.com",
+      alreadyProcessedIds: seenIds,
+    });
+    assert.equal(dunningResult.recurlyState, "DUNNING_GRACE_PERIOD");
+  });
+
+  it("automatically voids and refunds Recurly subscription when clinical intake is INELIGIBLE", () => {
+    const seenIds = new Set<string>();
+    const ineligibleResult = evaluateRecurlyEntitlementSync({
+      webhookId: "recurly_wh_ineligible_01",
+      eventType: "clinical.intake_ineligible",
+      accountEmail: "alex.rivera@patient.com",
+      intakeStatus: "INELIGIBLE",
+      alreadyProcessedIds: seenIds,
+    });
+    assert.equal(ineligibleResult.recurlyState, "CANCELED_REFUNDED_INELIGIBLE");
+  });
+
+  it("scrubs PHI (weight, BMI, comorbidities) and 3rd-party ad cookies (ttcsid, sc_at) before Braze dispatch", () => {
+    const scrubbed = scrubPhiForServerTelemetry({
+      campaignName: "week_4_glp1_step_up_reminder",
+      userId: "uuid-1234",
+      weightLb: 215,
+      calculatedBmi: 32.7,
+      comorbidities: ["HYPERTENSION"],
+      ttcsid: "tiktok_tracking_cookie_123",
+      sc_at: "snapchat_cookie_456",
+    });
+
+    assert.equal(scrubbed.hipaaCompliant, true);
+    assert.equal("weightLb" in scrubbed.safeAttributes, false);
+    assert.equal("calculatedBmi" in scrubbed.safeAttributes, false);
+    assert.equal("ttcsid" in scrubbed.safeAttributes, false);
+    assert.equal(scrubbed.safeAttributes.campaignName, "week_4_glp1_step_up_reminder");
   });
 });
