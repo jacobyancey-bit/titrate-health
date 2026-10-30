@@ -1,0 +1,10 @@
+{
+  "id": "/",
+  "name": "Titrate-Health | GLP-1 Clinical Member & Triage Portal",
+  "short_name": "TitrateMed+",
+  "description": "HIPAA-compliant GLP-1 titration state machine, clinician triage, and Recurly entitlement sync.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#090d16",
+  "theme_color": "#10b981"
+}

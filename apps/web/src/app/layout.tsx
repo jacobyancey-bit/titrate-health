@@ -5,6 +5,7 @@ export const metadata: Metadata = {
   title: "Titrate-Health | GLP-1 Clinical Telemetry & Triage Platform",
   description:
     "Full-stack clinical weight management, GLP-1 titration state machine, and clinician triage portal.",
+  manifest: "/site.webmanifest",
 };
 
 export default function RootLayout({

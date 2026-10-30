@@ -1,14 +1,15 @@
 "use client";
 
 /**
- * @fileoverview Main Interactive Clinical Telemetry & Clinician Triage Portal.
+ * @fileoverview Main Interactive Member Telemetry, Clinician Triage & Care Ops Portal.
  *
  * Architectural Highlights:
- * 1. Shares domain constants & `calculateBmi()` directly from `@titrate-health/shared`.
- * 2. Authenticates against `POST /api/auth/demo-token` with live RBAC role switching (`PATIENT` vs `CLINICIAN`).
- * 3. Visualizes the Redis Cache-Aside state (`REDIS_HIT` vs `POSTGRES_MISS`) in real time.
- * 4. Renders the FDA Semaglutide titration ladder (`0.25 -> 0.5 -> 1.0 -> 1.7 -> 2.4 mg`),
- *    biometric trend telemetry, intake submission, and clinician review queue.
+ * 1. Domain-Driven Design (DDD) Bounded Contexts: Surfaces "Member" in the subscription/UI
+ *    layer while mapping 1:1 to `PatientProfile` (`PATIENT` RBAC role) in PostgreSQL.
+ * 2. Authenticates all 3 RBAC personas (`PATIENT`, `CLINICIAN`, `CARE_COORDINATOR`).
+ * 3. Visualizes Redis Cache-Aside state (`REDIS_HIT` vs `POSTGRES_MISS`) in real time.
+ * 4. Care Ops Admin View (`CARE_COORDINATOR`): Interactive Recurly Webhook Idempotency &
+ *    Dunning Grace simulator + HIPAA PHI-Scrubbed Server-Side Braze/Amplitude (`202 Accepted`) dispatcher.
  */
 
 import React, { useEffect, useState, useCallback } from "react";
@@ -30,11 +31,13 @@ import {
   AlertTriangle,
   CheckCircle2,
   RefreshCw,
+  CreditCard,
+  Radio,
 } from "lucide-react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
-type Role = "PATIENT" | "CLINICIAN";
+type Role = "PATIENT" | "CLINICIAN" | "CARE_COORDINATOR";
 
 export default function TitrateHealthPortal() {
   const [role, setRole] = useState<Role>("PATIENT");
@@ -43,11 +46,11 @@ export default function TitrateHealthPortal() {
   const [loading, setLoading] = useState<boolean>(true);
   const [statusBanner, setStatusBanner] = useState<string>("");
 
-  // Patient Dashboard State
+  // Member (PATIENT) Dashboard State
   const [cacheSource, setCacheSource] = useState<"REDIS_HIT" | "POSTGRES_MISS" | null>(null);
   const [dashboard, setDashboard] = useState<any>(null);
 
-  // Patient Forms State
+  // Member Telemetry Forms State
   const [weightInput, setWeightInput] = useState<number>(208.0);
   const [proteinInput, setProteinInput] = useState<number>(120);
   const [waterInput, setWaterInput] = useState<number>(90);
@@ -61,9 +64,14 @@ export default function TitrateHealthPortal() {
   const [selectedComorbidities, setSelectedComorbidities] = useState<string[]>(["HYPERTENSION"]);
   const [selectedContraindications, setSelectedContraindications] = useState<string[]>([]);
 
-  // Clinician Queue State
+  // Clinician Queue & HIPAA Audit State
   const [intakeQueue, setIntakeQueue] = useState<any[]>([]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
+
+  // Care Ops Admin (Recurly & Braze/Amplitude) State
+  const [opsOverview, setOpsOverview] = useState<any>(null);
+  const [lastWebhookId, setLastWebhookId] = useState<string>("recurly_wh_2026_001");
+  const [telemetryResult, setTelemetryResult] = useState<any>(null);
 
   /**
    * 1. Authenticate with the Express API for the selected RBAC persona.
@@ -86,8 +94,10 @@ export default function TitrateHealthPortal() {
 
       if (targetRole === "PATIENT") {
         await fetchPatientDashboard(data.token);
-      } else {
+      } else if (targetRole === "CLINICIAN") {
         await fetchClinicianQueue(data.token);
+      } else {
+        await fetchOpsOverview(data.token);
       }
     } catch (err: any) {
       setStatusBanner(`Error: ${err.message}`);
@@ -97,7 +107,7 @@ export default function TitrateHealthPortal() {
   }, []);
 
   /**
-   * 2. Fetch Patient Dashboard (demonstrates Redis Cache-Aside: REDIS_HIT vs POSTGRES_MISS).
+   * 2. Fetch Member Dashboard (demonstrates Redis Cache-Aside: REDIS_HIT vs POSTGRES_MISS).
    */
   const fetchPatientDashboard = async (jwtToken = token) => {
     const res = await fetch(`${API_BASE}/api/patient/dashboard`, {
@@ -111,34 +121,44 @@ export default function TitrateHealthPortal() {
   };
 
   /**
-   * 3. Fetch Clinician Intake Triage Queue.
+   * 3. Fetch Clinician Intake Triage Queue & HIPAA Audit Logs in parallel.
    */
   const fetchClinicianQueue = async (jwtToken = token) => {
-  const [queueRes, auditRes] = await Promise.all([
-    fetch(`${API_BASE}/api/intake/queue`, {
+    const [queueRes, auditRes] = await Promise.all([
+      fetch(`${API_BASE}/api/intake/queue`, {
+        headers: { Authorization: `Bearer ${jwtToken}` },
+      }),
+      fetch(`${API_BASE}/api/intake/audit-logs`, {
+        headers: { Authorization: `Bearer ${jwtToken}` },
+      }),
+    ]);
+    if (queueRes.ok) {
+      const payload = await queueRes.json();
+      setIntakeQueue(payload.intakes || []);
+    }
+    if (auditRes.ok) {
+      const auditPayload = await auditRes.json();
+      setAuditLogs(auditPayload.logs || []);
+    }
+  };
+
+  /**
+   * 4. Fetch Care Coordinator Admin Ops Overview (Recurly & HIPAA Metrics).
+   */
+  const fetchOpsOverview = async (jwtToken = token) => {
+    const res = await fetch(`${API_BASE}/api/ops/overview`, {
       headers: { Authorization: `Bearer ${jwtToken}` },
-    }),
-    fetch(`${API_BASE}/api/intake/audit-logs`, {
-      headers: { Authorization: `Bearer ${jwtToken}` },
-    }),
-  ]);
-  if (queueRes.ok) {
-    const payload = await queueRes.json();
-    setIntakeQueue(payload.intakes || []);
-  }
-  if (auditRes.ok) {
-    const auditPayload = await auditRes.json();
-    setAuditLogs(auditPayload.logs || []);
-  }
-};
+    });
+    if (res.ok) {
+      const payload = await res.json();
+      setOpsOverview(payload);
+    }
+  };
 
   useEffect(() => {
     authenticateRole("PATIENT");
   }, [authenticateRole]);
 
-  /**
-   * Submit Daily Biometrics (Evicts Redis cache & refreshes dashboard).
-   */
   const handleLogBiometrics = async (e: React.FormEvent) => {
     e.preventDefault();
     const res = await fetch(`${API_BASE}/api/patient/biometrics`, {
@@ -158,9 +178,6 @@ export default function TitrateHealthPortal() {
     await fetchPatientDashboard();
   };
 
-  /**
-   * Submit Weekly GLP-1 Dose (Evicts Redis cache & re-evaluates Titration State Machine).
-   */
   const handleLogMedication = async (e: React.FormEvent) => {
     e.preventDefault();
     const res = await fetch(`${API_BASE}/api/patient/medication-log`, {
@@ -180,9 +197,6 @@ export default function TitrateHealthPortal() {
     await fetchPatientDashboard();
   };
 
-  /**
-   * Submit New Clinical Intake (Runs Zod validation + FDA BMI & Contraindication Triage).
-   */
   const handleSubmitIntake = async (e: React.FormEvent) => {
     e.preventDefault();
     const res = await fetch(`${API_BASE}/api/intake`, {
@@ -204,9 +218,6 @@ export default function TitrateHealthPortal() {
     await fetchPatientDashboard();
   };
 
-  /**
-   * Clinician Approves or Rejects an Intake in ACID transaction.
-   */
   const handleClinicianDecision = async (
     intakeId: string,
     decision: "APPROVED" | "INELIGIBLE"
@@ -230,6 +241,69 @@ export default function TitrateHealthPortal() {
     await fetchClinicianQueue();
   };
 
+  /**
+   * Simulate a Recurly Webhook event (`invoice.paid`, `dunning.new_dunning_event`, etc.)
+   */
+  const handleTriggerRecurlyWebhook = async (
+    eventType:
+      | "invoice.paid"
+      | "dunning.new_dunning_event"
+      | "clinical.intake_ineligible",
+    reuseLastId = false
+  ) => {
+    const webhookId = reuseLastId
+      ? lastWebhookId
+      : `recurly_wh_${Math.floor(1000 + Math.random() * 9000)}`;
+    setLastWebhookId(webhookId);
+
+    const res = await fetch(`${API_BASE}/api/ops/recurly-webhook`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        webhookId,
+        eventType,
+        accountEmail: "alex.rivera@patient.com",
+      }),
+    });
+    const data = await res.json();
+    setStatusBanner(data.message || data.error);
+    await fetchOpsOverview();
+  };
+
+  /**
+   * Dispatch a Server-Side Braze & Amplitude Event (`HTTP 202 Accepted`) with PHI Scrubbing.
+   */
+  const handleDispatchServerTelemetry = async () => {
+    const res = await fetch(`${API_BASE}/api/ops/telemetry-dispatch`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        campaignName: "med_plus_week4_titration_check_in",
+        memberEmail: "alex.rivera@patient.com",
+        subscriptionTier: "ww-med-plus-glp1",
+        // Simulated PHI & 3rd-party Ad Cookies that MUST be stripped by the server scrubber:
+        weightLb: 209.4,
+        calculatedBmi: 31.8,
+        comorbidities: ["HYPERTENSION"],
+        ttcsid: "1793396509877::tiktok_pixel_id",
+        sc_at: "v2|snapchat_ad_cookie",
+        t_gid: "taboola_ad_id",
+      }),
+    });
+    const data = await res.json();
+    setTelemetryResult({ httpStatus: res.status, ...data });
+    setStatusBanner(
+      `HTTP ${res.status} Accepted: Scrubbed ${data.scrubbedResult?.strippedKeys?.length} PHI & Ad-Pixel keys before Braze/Amplitude dispatch!`
+    );
+    await fetchOpsOverview();
+  };
+
   const toggleItem = (list: string[], item: string, setter: (v: string[]) => void) => {
     setter(list.includes(item) ? list.filter((i) => i !== item) : [...list, item]);
   };
@@ -251,17 +325,19 @@ export default function TitrateHealthPortal() {
                   Titrate-Health
                 </h1>
                 <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-                  GLP-1 Telemetry & RBAC
+                  GLP-1 Med+ Telemetry & RBAC
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Signed in as <span className="text-slate-200 font-mono">{userEmail || "..."}</span>
+                Signed in as{" "}
+                <span className="text-slate-200 font-mono">{userEmail || "..."}</span> (
+                <span className="text-emerald-400 font-mono">{role}</span>)
               </p>
             </div>
           </div>
 
-          {/* RBAC Role Switcher + Cache Status */}
-          <div className="flex items-center gap-3">
+          {/* 3-Persona RBAC Switcher + Redis Cache Status */}
+          <div className="flex flex-wrap items-center gap-3">
             {role === "PATIENT" && cacheSource && (
               <button
                 onClick={() => fetchPatientDashboard()}
@@ -285,25 +361,36 @@ export default function TitrateHealthPortal() {
             <div className="inline-flex rounded-xl bg-slate-900 p-1 border border-slate-800">
               <button
                 onClick={() => authenticateRole("PATIENT")}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
                   role === "PATIENT"
                     ? "bg-emerald-500 text-slate-950 shadow"
                     : "text-slate-400 hover:text-white"
                 }`}
               >
                 <UserCheck className="h-3.5 w-3.5" />
-                Patient View
+                Member View (PATIENT)
               </button>
               <button
                 onClick={() => authenticateRole("CLINICIAN")}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
                   role === "CLINICIAN"
                     ? "bg-indigo-500 text-white shadow"
                     : "text-slate-400 hover:text-white"
                 }`}
               >
                 <Stethoscope className="h-3.5 w-3.5" />
-                Clinician Triage (RBAC)
+                Clinician Triage
+              </button>
+              <button
+                onClick={() => authenticateRole("CARE_COORDINATOR")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                  role === "CARE_COORDINATOR"
+                    ? "bg-amber-500 text-slate-950 shadow"
+                    : "text-slate-400 hover:text-white"
+                }`}
+              >
+                <CreditCard className="h-3.5 w-3.5" />
+                Care Ops Admin (Recurly & Braze)
               </button>
             </div>
           </div>
@@ -333,11 +420,11 @@ export default function TitrateHealthPortal() {
           </div>
         ) : role === "PATIENT" && dashboard ? (
           <>
-            {/* 1. KPI Summary Row */}
+            {/* 1. Member KPI Summary Row */}
             <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-5">
                 <p className="text-xs uppercase tracking-wider text-slate-400">
-                  Current Weight
+                  Member Current Weight
                 </p>
                 <p className="text-3xl font-bold text-white mt-1">
                   {dashboard.profile.currentWeightLb}{" "}
@@ -359,7 +446,7 @@ export default function TitrateHealthPortal() {
                   <span className="text-base font-normal text-slate-400">lbs</span>
                 </p>
                 <p className="text-xs text-slate-400 mt-2">
-                  Tracked across {dashboard.biometrics.length} biometric check-ins
+                  Tracked across {dashboard.biometrics.length} member check-ins
                 </p>
               </div>
 
@@ -448,16 +535,15 @@ export default function TitrateHealthPortal() {
               </div>
             </section>
 
-            {/* 3. Interactive Telemetry Forms (Biometrics, Dose Log, Intake) */}
+            {/* 3. Interactive Member Telemetry Forms */}
             <section className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Form A: Log Weight & Nutrition */}
               <form
                 onSubmit={handleLogBiometrics}
                 className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 space-y-4"
               >
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <Scale className="h-4 w-4 text-sky-400" />
-                  1. Log Biometric Check-In
+                  1. Log Member Biometric Check-In
                 </h3>
                 <div className="space-y-3 text-xs">
                   <div>
@@ -499,7 +585,6 @@ export default function TitrateHealthPortal() {
                 </button>
               </form>
 
-              {/* Form B: Log Weekly GLP-1 Dose */}
               <form
                 onSubmit={handleLogMedication}
                 className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 space-y-4"
@@ -560,7 +645,6 @@ export default function TitrateHealthPortal() {
                 </button>
               </form>
 
-              {/* Form C: Submit Clinical Intake Triage */}
               <form
                 onSubmit={handleSubmitIntake}
                 className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 space-y-4"
@@ -655,7 +739,7 @@ export default function TitrateHealthPortal() {
               </form>
             </section>
           </>
-                ) : (
+        ) : role === "CLINICIAN" ? (
           /* CLINICIAN RBAC TRIAGE VIEW */
           <>
             <section className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 space-y-5">
@@ -666,8 +750,8 @@ export default function TitrateHealthPortal() {
                     Clinician Intake Triage Queue (RBAC Protected: CLINICIAN Role Only)
                   </h2>
                   <p className="text-xs text-slate-400 mt-0.5">
-                    Approving an intake executes a Prisma ACID transaction that updates intake
-                    status, seeds Week 1 Semaglutide (0.25mg), and writes a HIPAA AuditLog.
+                    Approving a Member intake executes a Prisma ACID transaction that updates
+                    intake status, seeds Week 1 Semaglutide (0.25mg), and writes a HIPAA AuditLog.
                   </p>
                 </div>
                 <span className="text-xs font-mono px-3 py-1 rounded-full bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
@@ -684,7 +768,7 @@ export default function TitrateHealthPortal() {
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-sm font-semibold text-white">
-                          {item.patientProfile?.user?.email || "Patient"}
+                          {item.patientProfile?.user?.email || "Member"}
                         </span>
                         <span
                           className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
@@ -790,6 +874,122 @@ export default function TitrateHealthPortal() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </section>
+          </>
+        ) : (
+          /* CARE COORDINATOR / ADMIN OPS VIEW (RECURLY & SERVER-SIDE BRAZE/AMPLITUDE) */
+          <>
+            <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Card 1: Recurly Subscription Entitlement & Dunning Grace Simulator */}
+              <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 space-y-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                      <CreditCard className="h-4 w-4 text-amber-400" />
+                      Recurly Subscription Lifecycle & Idempotent Webhook Engine
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Synchronizes Member Recurly billing state with clinical GLP-1 eligibility and enforces a 7-day dunning grace window.
+                    </p>
+                  </div>
+                </div>
+
+                {opsOverview?.subscriptions?.map((sub: any) => (
+                  <div
+                    key={sub.accountEmail}
+                    className="rounded-xl bg-slate-950 border border-slate-800 p-4 space-y-2 text-xs font-mono"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-white font-semibold">{sub.accountEmail}</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full font-bold ${
+                          sub.recurlyState === "ACTIVE"
+                            ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                            : sub.recurlyState === "DUNNING_GRACE_PERIOD"
+                            ? "bg-amber-500/15 text-amber-300 border border-amber-500/30"
+                            : "bg-rose-500/15 text-rose-300 border border-rose-500/30"
+                        }`}
+                      >
+                        {sub.recurlyState}
+                      </span>
+                    </div>
+                    <p className="text-slate-400">Plan: {sub.planCode}</p>
+                    <p className="text-slate-400">Last Webhook ID: {sub.lastWebhookId}</p>
+                    {sub.dunningGraceEndsAt && (
+                      <p className="text-amber-300">
+                        7-Day GLP-1 Continuity Grace Ends:{" "}
+                        {new Date(sub.dunningGraceEndsAt).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                ))}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-2">
+                  <button
+                    onClick={() => handleTriggerRecurlyWebhook("dunning.new_dunning_event")}
+                    className="rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 font-semibold py-2.5 px-3 text-xs transition"
+                  >
+                    1. Simulate Recurly Dunning (7-Day Grace)
+                  </button>
+                  <button
+                    onClick={() => handleTriggerRecurlyWebhook("clinical.intake_ineligible")}
+                    className="rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-200 font-semibold py-2.5 px-3 text-xs transition"
+                  >
+                    2. Simulate Clinical Ineligible (Auto-Refund)
+                  </button>
+                  <button
+                    onClick={() => handleTriggerRecurlyWebhook("invoice.paid")}
+                    className="rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-200 font-semibold py-2.5 px-3 text-xs transition"
+                  >
+                    3. Simulate Recurly Invoice Paid (Active)
+                  </button>
+                  <button
+                    onClick={() => handleTriggerRecurlyWebhook("invoice.paid", true)}
+                    className="rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-200 font-semibold py-2.5 px-3 text-xs transition"
+                  >
+                    4. Replay Same Webhook ID (Idempotency Test)
+                  </button>
+                </div>
+              </div>
+
+              {/* Card 2: HIPAA PHI-Scrubbed Server-Side Braze & Amplitude Dispatcher */}
+              <div className="rounded-2xl bg-slate-900/90 border border-slate-800 p-6 space-y-5">
+                <div>
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <Radio className="h-4 w-4 text-emerald-400" />
+                    Server-Side Braze & Amplitude PHI Firewall (HTTP 202 Accepted)
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Prevents client-side `(blocked:other)` ad-blocker failures and scrubs PHI (`weightLb`, `calculatedBmi`) + 3rd-party ad cookies (`ttcsid`, `sc_at`, `t_gid`) before dispatching events.
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleDispatchServerTelemetry}
+                  className="w-full rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-semibold py-2.5 text-xs transition"
+                >
+                  Dispatch Server-Side Braze Adherence Nudge (Test PHI Scrubber)
+                </button>
+
+                {telemetryResult && (
+                  <div className="rounded-xl bg-slate-950 border border-slate-800 p-4 space-y-2 text-xs font-mono">
+                    <div className="flex items-center justify-between">
+                      <span className="text-emerald-400 font-bold">
+                        HTTP {telemetryResult.httpStatus} ({telemetryResult.status})
+                      </span>
+                      <span className="text-slate-400">HIPAA Safe: true</span>
+                    </div>
+                    <p className="text-rose-300">
+                      Stripped PHI & Ad Keys:{" "}
+                      {telemetryResult.scrubbedResult?.strippedKeys?.join(", ")}
+                    </p>
+                    <p className="text-sky-300">
+                      Forwarded Safe Payload:{" "}
+                      {JSON.stringify(telemetryResult.scrubbedResult?.safeAttributes)}
+                    </p>
+                  </div>
+                )}
               </div>
             </section>
           </>
