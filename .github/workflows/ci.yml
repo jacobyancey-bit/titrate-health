@@ -1,0 +1,47 @@
+name: Titrate-Health CI Pipeline
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  validate-typecheck-and-test:
+    name: Prisma Validation, Typecheck & Automated Test Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Monorepo
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install Workspace Dependencies
+        run: npm ci
+
+      - name: Validate Prisma 3NF Schema & Generate Client
+        working-directory: apps/api
+        env:
+          DATABASE_URL: "postgresql://titrate_admin:titrate_local_dev_password@localhost:5432/titrate_health_db?schema=public"
+        run: |
+          npx prisma validate
+          npx prisma generate
+
+      - name: Typecheck Shared Domain (@titrate-health/shared)
+        working-directory: packages/shared
+        run: npx tsc --noEmit
+
+      - name: Typecheck Express API (@titrate-health/api)
+        working-directory: apps/api
+        run: npx tsc --noEmit
+
+      - name: Execute Automated Clinical & Security Test Suite (13 Tests)
+        run: npm test
+
+      - name: Supply-Chain Security Audit
+        run: npm audit --audit-level=high
