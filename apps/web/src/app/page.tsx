@@ -3,7 +3,7 @@
 /**
  * @fileoverview Main Interactive Member Portal (`/`) & Separated Staff Admin Console (`/admin`).
  *
- * WeightWatchers Med+ Architecture Highlights:
+ * Clinical Telehealth Architecture Highlights:
  * 1. Route Separation:
  *    - `http://localhost:3000/` (`mode="MEMBER"`): Exclusively renders the Member (`PATIENT`) experience.
  *    - `http://localhost:3000/admin` (`mode="ADMIN"`): Renders the Internal Staff Console.
@@ -310,7 +310,7 @@ export default function TitrateHealthPortal({
       body: JSON.stringify({
         campaignName: "med_plus_week4_titration_check_in",
         memberEmail: "alex.rivera@patient.com",
-        subscriptionTier: "ww-med-plus-glp1",
+        subscriptionTier: "titrate-clinical-glp1",
         weightLb: 209.4,
         calculatedBmi: 31.8,
         comorbidities: ["HYPERTENSION"],
@@ -797,7 +797,7 @@ export default function TitrateHealthPortal({
         ) : (
           /* =================================================================
              ROUTE 2 (`/admin`): SEPARATED STAFF ADMIN CONSOLE
-             Demonstrates WeightWatchers Med+ Separation of Duties:
+             Enforces RBAC Separation of Duties:
              - Panel A: Clinical Triage (`CLINICIAN` write / `CARE_COORDINATOR` read-only)
              - Panel B: Recurly & Braze Ops (`CARE_COORDINATOR` write / `CLINICIAN` read-only)
              - Panel C: Immutable HIPAA AuditLog (Append-only read for both, editable by NO ONE)
@@ -808,7 +808,7 @@ export default function TitrateHealthPortal({
               <div className="space-y-1">
                 <h2 className="text-sm font-bold text-white flex items-center gap-2">
                   <Lock className="h-4 w-4 text-amber-400" />
-                  WeightWatchers Med+ Separation of Duties Matrix (Active Role: {role})
+                  RBAC Separation of Duties Matrix (Active Role: {role})
                 </h2>
                 <p className="text-xs text-slate-400">
                   No single admin can edit everything. Try clicking a locked control belonging to the other role below to observe Express RBAC return{" "}

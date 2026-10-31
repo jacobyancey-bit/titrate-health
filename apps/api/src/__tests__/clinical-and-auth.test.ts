@@ -315,4 +315,25 @@ describe("5. Recurly Subscription Entitlement Sync, Dunning Grace & HIPAA PHI Sc
     assert.equal("ttcsid" in scrubbed.safeAttributes, false);
     assert.equal(scrubbed.safeAttributes.campaignName, "week_4_glp1_step_up_reminder");
   });
+
+  it("strips device/network identifiers (MUID, gbraid, controllingTerms) and anonymizes clinical event names", () => {
+    const scrubbed = scrubPhiForServerTelemetry({
+      eventName: "PrescriptionEligibilityApproved",
+      ipAddress: "203.0.113.42",
+      userAgent: "Mozilla/5.0",
+      device_id: "dev_998877",
+      MUID: "clarity_muid_cookie",
+      gbraid: "0AAAAAD_ad_click",
+      controllingTerms: "glp1+weight+loss+medication",
+      medicationName: "Semaglutide",
+    });
+
+    assert.equal(scrubbed.anonymizedEventName, "Conversion");
+    assert.equal(scrubbed.safeAttributes.eventName, "Conversion");
+    assert.equal("ipAddress" in scrubbed.safeAttributes, false);
+    assert.equal("MUID" in scrubbed.safeAttributes, false);
+    assert.equal("gbraid" in scrubbed.safeAttributes, false);
+    assert.equal("controllingTerms" in scrubbed.safeAttributes, false);
+    assert.equal("medicationName" in scrubbed.safeAttributes, false);
+  });
 });

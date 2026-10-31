@@ -40,7 +40,7 @@ jobs:
         working-directory: apps/api
         run: npx tsc --noEmit
 
-      - name: Execute Automated Clinical & Security Test Suite (13 Tests)
+      - name: Execute Automated Clinical & Security Test Suite (18 Tests)
         run: npm test
 
       - name: Supply-Chain Security Audit

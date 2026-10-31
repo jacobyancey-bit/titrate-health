@@ -129,7 +129,7 @@ export function scrubPhiForServerTelemetry(rawPayload: Record<string, unknown>) 
         "userAgent",
         "referrer",
         "device_id",
-        "ww_browser_id",
+        "browser_id",
         "MUID",
         "_fbp",
         "_ttp",
@@ -226,7 +226,7 @@ opsRouter.post(
 
             const updatedSub: RecurlySubscriptionState = {
                 accountEmail,
-                planCode: "ww-med-plus-glp1-monthly",
+                planCode: "titrate-clinical-glp1-monthly",
                 recurlyState: syncResult.recurlyState,
                 dunningGraceEndsAt: graceDate,
                 lastWebhookId: webhookId,
@@ -279,7 +279,7 @@ opsRouter.post(
             // Return HTTP 202 Accepted (Asynchronous Event Queued) matching production telemetry
             res.status(202).json({
                 status: "ACCEPTED_FOR_ASYNC_DELIVERY",
-                destinations: ["Braze (braze-server-api)", "Amplitude (ww_amp_server)"],
+                destinations: ["Braze (braze-server-api)", "Amplitude (analytics-server-api)"],
                 scrubbedResult: scrubbed,
             });
         } catch (error) {
@@ -312,7 +312,7 @@ opsRouter.get(
             if (!subscriptionStore.has("alex.rivera@patient.com")) {
                 subscriptionStore.set("alex.rivera@patient.com", {
                     accountEmail: "alex.rivera@patient.com",
-                    planCode: "ww-med-plus-glp1-monthly",
+                    planCode: "titrate-clinical-glp1-monthly",
                     recurlyState: "ACTIVE",
                     dunningGraceEndsAt: null,
                     lastWebhookId: "wh_initial_seed_001",

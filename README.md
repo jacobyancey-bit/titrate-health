@@ -92,9 +92,12 @@ In regulated healthcare platforms, **no single administrator is permitted to mut
 - **Recurly Entitlement & Dunning Continuity**: Synchronizes clinical `INELIGIBLE` decisions to automatically void/refund Recurly subscriptions (`CANCELED_REFUNDED_INELIGIBLE`), deduplicates incoming Recurly webhooks via idempotency keys, and activates a **7-day clinical continuity grace period** on `dunning.new_dunning_event` so a failed payment card does not abruptly interrupt a member's 4-week Semaglutide titration block.
 - **Server-Side Braze & Amplitude PHI Scrubber (`HTTP 202 Accepted`)**: Scrubs sensitive PHI (`weightLb`, `calculatedBmi`, `comorbidities`) and third-party ad-tracker cookies (`ttcsid` TikTok, `sc_at` Snapchat, `t_gid` Taboola) before queuing lifecycle reminders.
 
-### E. Production Security Hardening (`apps/api/src/middleware/security.ts`)
-- **Memory-Hard `scrypt` Password Hashing**: Uses `node:crypto` `scryptSync` with unique 16-byte cryptographic salts and constant-time `timingSafeEqual` verification to defeat rainbow tables and timing side-channel attacks.
-- **OWASP HTTP Headers & Rate Limiting**: Strips `X-Powered-By`, sets `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Strict-Transport-Security`, and enforces fixed-window IP rate limiting (`HTTP 429 Too Many Requests`).
+### E. Production Security Hardening & Healthcare Privacy Sandbox
+- **Memory-Hard `scrypt` Password Hashing (`apps/api/src/middleware/security.ts`)**: Uses `node:crypto` `scryptSync` with unique 16-byte cryptographic salts and constant-time `timingSafeEqual` verification to defeat rainbow tables and timing side-channel attacks.
+- **Strict Content Security Policy (CSP) & OWASP Headers (`apps/web/next.config.mjs` & `security.ts`)**: Enforces `Content-Security-Policy` (`default-src 'self'`, `frame-ancestors 'none'`, `form-action 'self'`), `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Strict-Transport-Security`, and fixed-window IP rate limiting (`HTTP 429 Too Many Requests`).
+- **Next.js 16 Edge URL Sanitization & Attribution Tokenization (`apps/web/src/proxy.ts`)**: Intercepts incoming advertising parameters (`gbraid`, `g_adid`, `utm_*`, `cid`) and diagnostic search strings (`controllingTerms`), drops search terms, stores opaque campaign tokens in a short-lived `HttpOnly; SameSite=Strict` cookie (`titrate_attr_session`), and `307` redirects the browser to a clean URL path.
+- **Client-Side Clinical Route Sandbox (`apps/web/src/components/ClinicalPrivacySandbox.tsx`)**: Purges third-party tracking globals (`clarity`, `braze`, `dataLayer`, `analytics`, `fbq`, `ttq`) from `window` and expires external advertising cookies (`MUID`, `_fbp`, `_ttp`, `_clck`, `ttcsid`, `sc_at`, `t_gid`) on route mount.
+- **Server-Side Telemetry Redaction & Event Anonymization (`apps/api/src/routes/ops.ts`)**: Strips PHI, medication names, network/device identifiers (`ipAddress`, `userAgent`, `device_id`, `MUID`), and maps clinical milestone names (`PrescriptionEligibilityApproved` -> `Conversion`, `ClinicalIntakeSubmitted` -> `LeadGenerated`) before downstream dispatch.
 
 ---
 
@@ -151,7 +154,7 @@ erDiagram
 
 ## 5. Automated Verification & Quickstart
 
-### Run the 17 Automated Unit & Security Tests
+### Run the 18 Automated Unit & Security Tests
 ```bash
 npm test
 ```
