@@ -140,6 +140,12 @@ export function scrubPhiForServerTelemetry(rawPayload: Record<string, unknown>) 
         "gbraid",
         "g_adid",
         "g_adgroupid",
+        "rbuid",
+        "_rbuid",
+        "_rdt_uuid",
+        "_rdt_cid",
+        "_rdt_em",
+        "_rdt_pn",
     ]);
 
     const safeAttributes: Record<string, unknown> = {};

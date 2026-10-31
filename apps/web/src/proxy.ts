@@ -25,6 +25,8 @@ const SENSITIVE_OR_AD_QUERY_PARAMS = [
   "utm_content",
   "fbclid",
   "ttclid",
+  "rdt_cid",
+  "_rbuid",
 ] as const;
 
 export function proxy(request: NextRequest) {
