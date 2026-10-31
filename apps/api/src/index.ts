@@ -162,6 +162,7 @@ app.get(
 app.use("/api/intake", intakeRouter);
 app.use("/api/patient", patientRouter);
 app.use("/api/ops", opsRouter);
+app.use("/api/telemetry", opsRouter);
 
 // ============================================================================
 // 3. START HTTP SERVER

@@ -98,22 +98,48 @@ export function evaluateRecurlyEntitlementSync(params: {
     };
 }
 
+const CLINICAL_EVENT_ANONYMIZATION_MAP: Record<string, string> = {
+    PrescriptionEligibilityApproved: "Conversion",
+    ClinicalIntakeSubmitted: "LeadGenerated",
+    Glp1TitrationStepUp: "MilestoneCompleted",
+    med_plus_week4_titration_check_in: "MilestoneCompleted",
+};
+
 /**
- * Pure HIPAA Privacy & Ad-Pixel Scrubber:
- * Strips Protected Health Information (PHI) and third-party ad identifiers (`ttcsid`, `sc_at`, `t_gid`)
- * before forwarding lifecycle telemetry to server-side Braze or Amplitude.
+ * Server-Side Telemetry Redaction & Anonymization Pipeline:
+ * 1. Strips client network/device identifiers (`ipAddress`, `userAgent`, `referrer`, `device_id`, `MUID`).
+ * 2. Strips Protected Health Information (PHI), medication names, and diagnostic search terms.
+ * 3. Maps clinical milestone event names to generic attribution event names (`Conversion`, `LeadGenerated`).
  */
 export function scrubPhiForServerTelemetry(rawPayload: Record<string, unknown>) {
     const FORBIDDEN_PHI_AND_AD_KEYS = new Set([
+        // Clinical & PHI fields
         "weightLb",
         "startingWeightLb",
         "calculatedBmi",
         "comorbidities",
         "contraindications",
         "dateOfBirth",
-        "ttcsid", // TikTok Pixel cookie
-        "sc_at", // Snapchat Pixel cookie
-        "t_gid", // Taboola Pixel cookie
+        "medicationName",
+        "dosageMg",
+        "controllingTerms",
+        // Network, Device & Ad-Tracker Identifiers
+        "ipAddress",
+        "clientIp",
+        "userAgent",
+        "referrer",
+        "device_id",
+        "ww_browser_id",
+        "MUID",
+        "_fbp",
+        "_ttp",
+        "_clck",
+        "ttcsid",
+        "sc_at",
+        "t_gid",
+        "gbraid",
+        "g_adid",
+        "g_adgroupid",
     ]);
 
     const safeAttributes: Record<string, unknown> = {};
@@ -127,7 +153,19 @@ export function scrubPhiForServerTelemetry(rawPayload: Record<string, unknown>) 
         }
     }
 
+    // Anonymize clinical event or campaign names into generic conversion events
+    const rawEventName = String(
+        rawPayload.eventName ?? rawPayload.campaignName ?? "ApplicationEvent"
+    );
+    const anonymizedEventName =
+        CLINICAL_EVENT_ANONYMIZATION_MAP[rawEventName] ?? "GenericApplicationEvent";
+
+    if ("eventName" in safeAttributes) {
+        safeAttributes.eventName = anonymizedEventName;
+    }
+
     return {
+        anonymizedEventName,
         safeAttributes,
         strippedKeys,
         hipaaCompliant: true,
