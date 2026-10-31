@@ -27,7 +27,7 @@ const SENSITIVE_OR_AD_QUERY_PARAMS = [
   "ttclid",
 ] as const;
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const url = request.nextUrl.clone();
   let hasSensitiveParams = false;
   const capturedAttribution: Record<string, string> = {};
