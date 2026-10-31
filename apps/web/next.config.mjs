@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  productionBrowserSourceMaps: false,
   transpilePackages: ["@titrate-health/shared"],
   async headers() {
     const apiOrigin =

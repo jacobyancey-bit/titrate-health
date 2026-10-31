@@ -102,7 +102,7 @@ const CLINICAL_EVENT_ANONYMIZATION_MAP: Record<string, string> = {
     PrescriptionEligibilityApproved: "Conversion",
     ClinicalIntakeSubmitted: "LeadGenerated",
     Glp1TitrationStepUp: "MilestoneCompleted",
-    med_plus_week4_titration_check_in: "MilestoneCompleted",
+    clinical_week4_titration_check_in: "MilestoneCompleted",
 };
 
 /**

@@ -308,7 +308,7 @@ export default function TitrateHealthPortal({
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
-        campaignName: "med_plus_week4_titration_check_in",
+        campaignName: "clinical_week4_titration_check_in",
         memberEmail: "alex.rivera@patient.com",
         subscriptionTier: "titrate-clinical-glp1",
         weightLb: 209.4,
@@ -355,7 +355,7 @@ export default function TitrateHealthPortal({
                 <h1 className="text-lg font-bold tracking-tight text-white">
                   {mode === "ADMIN"
                     ? "Titrate-Health | Internal Staff Admin Console"
-                    : "Titrate-Health | Member Med+ Portal"}
+                    : "Titrate-Health | Member Clinical Portal"}
                 </h1>
                 <span className="text-[11px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
                   {mode === "ADMIN" ? "Route: /admin (RBAC Enforced)" : "Route: / (Member View)"}
